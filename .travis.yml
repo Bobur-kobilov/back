@@ -1,0 +1,64 @@
+branches:
+  only:
+  - local-pc
+  - local
+sudo: required
+language: python
+python:
+- 3.6
+services:
+- docker
+before_install:
+- "./aws_credential.sh"
+install:
+- pwd
+script:
+- cd docker
+
+- if [[ $TRAVIS_COMMIT_MESSAGE == *"production"* ]] && [ ${TRAVIS_BRANCH} = "local" ]; then
+  cd production;
+  docker build -t chainb-prod-bo-back .;
+  else
+  cd dev;
+  docker build -t dev-chainb-bo-back .;
+  fi
+  
+- if [ ${TRAVIS_BRANCH} = "local-pc" ]; then
+  cd ../local-pc;
+  docker build -t local-pc-chainb-bo-back .;
+  fi
+- docker images
+
+after_success:
+- pip install awscli
+- eval $(aws ecr get-login --no-include-email --region ap-northeast-2)
+- if [[ $TRAVIS_COMMIT_MESSAGE == *"production"* ]] && [ ${TRAVIS_BRANCH} = "local" ]; then
+  docker tag chainb-prod-bo-back:latest $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/chainb-prod-bo-back:$TRAVIS_BUILD_NUMBER;
+  docker tag chainb-prod-bo-back:latest $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/chainb-prod-bo-back:latest;
+  docker push $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/chainb-prod-bo-back:$TRAVIS_BUILD_NUMBER;
+  docker push $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/chainb-prod-bo-back:latest;
+  else
+  docker tag dev-chainb-bo-back:latest $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/dev-chainb-bo-back:$TRAVIS_BUILD_NUMBER;
+  docker tag dev-chainb-bo-back:latest $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/dev-chainb-bo-back:latest;
+  docker push $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/dev-chainb-bo-back:$TRAVIS_BUILD_NUMBER;
+  docker push $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/dev-chainb-bo-back:latest;
+  fi
+  
+- if [ ${TRAVIS_BRANCH} = "local-pc" ]; then
+  docker tag local-pc-chainb-bo-back:latest $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/local-pc-chainb-bo-back:$TRAVIS_BUILD_NUMBER;
+  docker tag local-pc-chainb-bo-back:latest $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/local-pc-chainb-bo-back:latest;
+  docker push $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/local-pc-chainb-bo-back:$TRAVIS_BUILD_NUMBER;
+  docker push $AWS_USERNAME.dkr.ecr.ap-northeast-2.amazonaws.com/local-pc-chainb-bo-back:latest;
+  fi
+
+- if [[ $TRAVIS_COMMIT_MESSAGE == *"production"* ]] && [ ${TRAVIS_BRANCH} = "local" ]; then
+  echo "dev deployment";
+  else
+  aws ecs update-service --cluster dev-chainb-BackOffice --service dev-chainb-bo-back --force-new-deployment;
+  fi
+
+env:
+  global:
+  - secure: RTppeQQThsF2KkSJNzVl1AJRoMTfBtpyFM/UwOxknALyH65wYhaSWeFSchC8VJzEm3c75OzCrJSVFNZrwEOVTOhiib6ggO2hAL2I3TC6wiQyLZBIDzY6KE0lyORtU3+fPIA2+0LKvZcPhRe6uojSC5gx4x2PQ2pwxEQs8PLpdUkWD/UgQzPspMC/TdiEOHd2BEVFKH6pnONWFc6RBEV728ZukhC2N8FcbgA2JcyDXixC0t0VJS3k93fG3A9q839oYMxb30Xlbgj0sV1h+PiqsnBd32ZaE4qlvyZ+TEMhkAwkcxCZxatkl6s+lt85sruovMvjldBzFzAYWxCjVNL9gvyfdAefOsYvtaA6dBA+pVF7aSW40nQTNqzqSBIrUD6ajYTf2NLHh1Crg9MjoOEvHQgTJdSJdtdyd6EkAWRw3i0LCrebEr5hfRWLiHIYAz1D2IqWCvDRdOe6CINMiAczFn9e1zXVKWI061oxAODGvtq8ksNC+mTd0NfqxLjhEGTaWQkqhibynW7pyrL+APrKv4QhA25G6A0PJA7ORHZu2+dQzOjRjXELmNh73/UDPqYlGf2QGUO8Inw3zBqkrD4pus23a4ZXOGQEzab+6d3IGPfBCo1b0qAEUBgScRwlyvzONDZb7U5pQl5SJOIaEc65qTXgD712jUVsOUzo+ID0IRg=
+  - secure: f3jz96RF0tNySCdD9yJGbBec7Mis42NXwYE7wZe9rmurDyKBVWEUWK3+GCAr9qdElqJi5Xbes6QvWVKzO6PWQgP3J6tx5CkF35A/VJ9G6R0HdvHVpWkxMrfF88lwNXTfFikaAWfmjj3HQOQE9hYvcIhiCLJaOtg/pSWfdWKQgkz5DO5qE0iL25k50Q3fK5GPBuq7pzQA6mNNTJnKFcTMIgqvROial0KcRK151vAvs0EElFsxBRV6gvmIl662I9O5qGkMx1iI4Qpahhl/91qy3FII98i/5/f4yF3ay5C8t9OQ9oeF6w4+ngFl6T17vhckt4yihXDE28uf00VQTWjvMwpSSC3kDARC8BWTA462D1oAjj5wlj1kIQPbuc9H36Mtfd1bjLhdE1pzB2BXVWUCrh7LS3fDG3kBp7n8JMsceTwo/7ZKuXYhz4h3cKFhiEDUs9PR0a8PBOQYkeOU9UqY5JWjbLYMrzsEpabKHdj98KI7xF/NLy9Ax5Ez8IKlORNZGRyutL/FbRF3CtQCHjv1SL0snNAiaLlmhHW7slWzZs242mHjcSjZkm53Z+9goVFzx5HJKZvoF7JPBUdAJkoR5697tM0k7dLRZGr1uvG2Kgam1LZnIeEItWJMfNo+NrwgJHOmtbqPh7DliP8SGj23zzjKcBJBiDa17TE6bZ+J8mQ=
+  - secure: UUqrUjeVLdigBHCR/bkwpd0qTfi0N7XnnfOnCw0M2BtYNmHEzPU10DAIqfYN9DDv6IuwMrT2+U8LD9fqEK92+eNHeGlLxX+3pbWdnALSbLt4AkZz0jhly41hmkIbHW7wT3mExJ63FQ3nvhLuCIl/yFiyJzXGVkpReUTYlwjRTXffBL97MMjfc+/h0ZvRpgDTIsaDW+CtHLrJ4/eDC2KIak8SEsUBPiuFqlSqY6CuLRQ8rsqX4i3hXs7Pk2a7klVtxMVsN7Py7bGxqa5zrbH/vHotLRnUgYivlweF5LHky1hlZs82oT2U2FDyesAg7JdBbZ6l59v6za8YS8gGcCS0mkUOFDl8GNN9s/09W5U8dg/zReI5KjMHb0gGcvMnXUUPScMERr/g+Gh+MmlkQ1VQfO26aE528VMUhpIMr16y7FjRCzCzNTdbZuvoVIdDNOD0inZitAxGcYqvFJXf0BvhNntyrz9fbDWEGXBDV/WX+lpeC5xMkTdCF1WSqXN9g0yoyMdWsv5fSbiSplwcoy8zy3p2finF69Z3T2uJYLvxDFo9YsYzCOr/O2MD1p/TA93puTJanydXzcJyt69Zfen0By4jiu0g2i8jdSiJt4PhrueKS/+J8FCA515P0mOmA5jQQFZKZJvD6V/cNvCF4Abizu5Dl+jPy2qM+mCzP0EnZYY=
